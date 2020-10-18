@@ -1,161 +1,165 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <script type='text/javascript' src='https://cdn.scaledrone.com/scaledrone.min.js'></script>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width">
-  <style>
+    <script type='text/javascript' src='https://cdn.scaledrone.com/scaledrone.min.js'></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <style>
     body {
-      display: flex;
-      height: 100vh;
-      margin: 0;
-      align-items: center;
-      justify-content: center;
-      padding: 0 50px;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        display: flex;
+        height: 100vh;
+        margin: 0;
+        align-items: center;
+        justify-content: center;
+        padding: 0 50px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
+
     video {
-      max-width: calc(50% - 100px);
-      margin: 0 50px;
-      box-sizing: border-box;
-      border-radius: 2px;
-      padding: 0;
-      box-shadow: rgba(156, 172, 172, 0.2) 0px 2px 2px, rgba(156, 172, 172, 0.2) 0px 4px 4px, rgba(156, 172, 172, 0.2) 0px 8px 8px, rgba(156, 172, 172, 0.2) 0px 16px 16px, rgba(156, 172, 172, 0.2) 0px 32px 32px, rgba(156, 172, 172, 0.2) 0px 64px 64px;
+        max-width: calc(50% - 100px);
+        margin: 0 50px;
+        box-sizing: border-box;
+        border-radius: 2px;
+        padding: 0;
     }
+
     .copy {
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 16px;
-      color: rgba(0, 0, 0, 0.5);
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 16px;
+        color: rgba(0, 0, 0, 0.5);
     }
-  </style>
+    </style>
 </head>
+
 <body>
-  <div class="copy">Send your URL to a friend to start a video call</div>
-  <video id="localVideo" autoplay muted></video>
-  <video id="remoteVideo" autoplay></video>
-  <script>
-    // Generate random room name if needed
-if (!location.hash) {
-  location.hash = Math.floor(Math.random() * 0xFFFFFF).toString(16);
-}
-const roomHash = location.hash.substring(1);
-
-// TODO: Replace with your own channel ID
-const drone = new ScaleDrone('I539nScBIhzidOXL');
-// Room name needs to be prefixed with 'observable-'
-const roomName = 'observable-' + roomHash;
-const configuration = {
-  iceServers: [{
-    urls: 'stun:stun.l.google.com:19302'
-  }]
-};
-let room;
-let pc;
-
-
-function onSuccess() {};
-function onError(error) {
-  console.error(error);
-};
-
-drone.on('open', error => {
-  if (error) {
-    return console.error(error);
-  }
-  room = drone.subscribe(roomName);
-  room.on('open', error => {
-    if (error) {
-      onError(error);
+    <div class="copy">发送链接以开始视频通话，你也可以自定义房间的hash值</div>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
+    <script>
+    // 如果没有自定义hash则自定义一个hash
+    if (!location.hash) {
+        location.hash = Math.floor(Math.random() * 0xFFFFFF).toString(16);
     }
-  });
-  // We're connected to the room and received an array of 'members'
-  // connected to the room (including us). Signaling server is ready.
-  room.on('members', members => {
-    console.log('MEMBERS', members);
-    // If we are the second user to connect to the room we will be creating the offer
-    const isOfferer = members.length === 2;
-    startWebRTC(isOfferer);
-  });
-});
+    const roomHash = location.hash.substring(1);
 
-// Send signaling data via Scaledrone
-function sendMessage(message) {
-  drone.publish({
-    room: roomName,
-    message
-  });
-}
+    // 使用ScaleDroneID创建一个ScaleDrone实例
+    const drone = new ScaleDrone('I539nScBIhzidOXL');
+    // 使用ScaleDrone的规则创建一个ScaleDrone房间名
+    const roomName = 'observable-' + roomHash;
 
-function startWebRTC(isOfferer) {
-  pc = new RTCPeerConnection(configuration);
+    // 使用Google的公用stun服务器
+    const configuration = {
+        iceServers: [{
+            urls: 'stun:stun.l.google.com:19302'
+        }]
+    };
+    let room;
+    let pc;
 
-  // 'onicecandidate' notifies us whenever an ICE agent needs to deliver a
-  // message to the other peer through the signaling server
-  pc.onicecandidate = event => {
-    if (event.candidate) {
-      sendMessage({'candidate': event.candidate});
-    }
-  };
+    function onSuccess() {};
 
-  // If user is offerer let the 'negotiationneeded' event create the offer
-  if (isOfferer) {
-    pc.onnegotiationneeded = () => {
-      pc.createOffer().then(localDescCreated).catch(onError);
-    }
-  }
+    function onError(error) {
+        console.error(error);
+    };
 
-  // When a remote stream arrives display it in the #remoteVideo element
-  pc.ontrack = event => {
-    const stream = event.streams[0];
-    if (!remoteVideo.srcObject || remoteVideo.srcObject.id !== stream.id) {
-      remoteVideo.srcObject = stream;
-    }
-  };
-
-  navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: true,
-  }).then(stream => {
-    // Display your local video in #localVideo element
-    localVideo.srcObject = stream;
-    // Add your stream to be sent to the conneting peer
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-  }, onError);
-
-  // Listen to signaling data from Scaledrone
-  room.on('data', (message, client) => {
-    // Message was sent by us
-    if (client.id === drone.clientId) {
-      return;
-    }
-
-    if (message.sdp) {
-      // This is called after receiving an offer or answer from another peer
-      pc.setRemoteDescription(new RTCSessionDescription(message.sdp), () => {
-        // When receiving an offer lets answer it
-        if (pc.remoteDescription.type === 'offer') {
-          pc.createAnswer().then(localDescCreated).catch(onError);
+    // 连接ScaleDrone创建房间
+    drone.on('open', error => {
+        if (error) {
+            return onError(error);
         }
-      }, onError);
-    } else if (message.candidate) {
-      // Add the new ICE candidate to our connections remote description
-      pc.addIceCandidate(
-        new RTCIceCandidate(message.candidate), onSuccess, onError
-      );
-    }
-  });
-}
+        room = drone.subscribe(roomName);
+        room.on('open', error => {
+            if (error) {
+                onError(error);
+            }
+        });
+        // 连接成功后服务器返回已连接到房间的成员
+        room.on('members', members => {
+            console.log('MEMBERS', members);
+            // 如果是二个连接到房间，就会创建WebRTC offer
+            const isOfferer = members.length === 2;
+            startWebRTC(isOfferer);
+        });
+    });
 
-function localDescCreated(desc) {
-  pc.setLocalDescription(
-    desc,
-    () => sendMessage({'sdp': pc.localDescription}),
-    onError
-  );
-}
-  </script>
+    function sendMessage(message) {
+        drone.publish({
+            room: roomName,
+            message
+        });
+    }
+
+    function startWebRTC(isOfferer) {
+        pc = new RTCPeerConnection(configuration);
+
+        // 当ICE Agent需要通过信号服务器发送信息到其他对等时，onicecandidate会通知我们
+        pc.onicecandidate = event => {
+            if (event.candidate) {
+                sendMessage({ 'candidate': event.candidate });
+            }
+        };
+
+        // 如果用户是第二个进入的就在onnegotiationneeded创建offer
+        if (isOfferer) {
+            pc.onnegotiationneeded = () => {
+                pc.createOffer().then(localDescCreated).catch(onError);
+            }
+        }
+
+        //当有一个远程视频流到达时在remoteVideo元素中显示
+        pc.ontrack = event => {
+            const stream = event.streams[0];
+            if (!remoteVideo.srcObject || remoteVideo.srcObject.id !== stream.id) {
+                remoteVideo.srcObject = stream;
+            }
+        };
+
+        navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true,
+        }).then(stream => {
+            // 在localVideo中显示自己的视频流
+            localVideo.srcObject = stream;
+            // 将自己的视频流推给对等方
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        }, onError);
+
+        // 监听ScaleDrone的信号以取得视频流
+        room.on('data', (message, client) => {
+            // 忽略从自己发的消息
+            if (client.id === drone.clientId) {
+                return;
+            }
+
+            if (message.sdp) {
+                // 在接受offer或受到对等方的回答后调用
+                pc.setRemoteDescription(new RTCSessionDescription(message.sdp), () => {
+                    // 收到offer后回答
+                    if (pc.remoteDescription.type === 'offer') {
+                        pc.createAnswer().then(localDescCreated).catch(onError);
+                    }
+                }, onError);
+            } else if (message.candidate) {
+                // 创建一个ICE Candidate添加到连接描述中
+                pc.addIceCandidate(
+                    new RTCIceCandidate(message.candidate), onSuccess, onError
+                );
+            }
+        });
+    }
+
+    function localDescCreated(desc) {
+        pc.setLocalDescription(
+            desc,
+            () => sendMessage({ 'sdp': pc.localDescription }),
+            onError
+        );
+    }
+    </script>
 </body>
+
 </html>
