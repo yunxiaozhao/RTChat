@@ -96,7 +96,7 @@
     function startWebRTC(isOfferer) {
         pc = new RTCPeerConnection(configuration);
 
-        // 当ICE Agent需要通过信号服务器发送信息到其他对等时，onicecandidate会通知我们
+        // 当ICE Agent需要通过信号服务器发送信息到其他对等时，onicecandidate会通知ScaleDrone
         pc.onicecandidate = event => {
             if (event.candidate) {
                 sendMessage({ 'candidate': event.candidate });
